@@ -51,10 +51,8 @@ class WorkshopInstallerService {
 
     /**
      * Initiates asynchronous installation or update of workshop mods.
-     * Mods are downloaded in batches to optimize Steam API usage and avoid rate limits.
-     * Each batch uses a single SteamCMD session (single login/logout) which is more efficient
-     * and less likely to hit rate limits compared to individual downloads.
-     * A delay is added between batches to prevent rate limiting.
+     * Mods are downloaded sequentially one at a time with delays between downloads
+     * to avoid rate limiting and ensure each mod is processed independently.
      * Note: This method intentionally does not have @Transactional annotation.
      * The transaction boundary is in handleInstallation instead, which runs asynchronously
      * after SteamCmd completes. This ensures the database session is available when
@@ -62,44 +60,56 @@ class WorkshopInstallerService {
      */
     public void installOrUpdateMods(Collection<WorkshopMod> mods) {
         List<WorkshopMod> modList = List.copyOf(mods);
-        int batchSize = 5; // Download 5 mods per batch to balance efficiency and stability
-        
-        log.info("Starting download of {} mods in batches of {}", modList.size(), batchSize);
-        installModBatchesSequentially(modList, 0, batchSize);
+        log.info("Starting sequential download of {} mods", modList.size());
+        installModsSequentiallyWithDelay(modList, 0);
     }
 
-    private void installModBatchesSequentially(List<WorkshopMod> mods, int startIndex, int batchSize) {
-        if (startIndex >= mods.size()) {
-            log.info("All mod batches have been queued for download");
+    private void installModsSequentiallyWithDelay(List<WorkshopMod> mods, int currentIndex) {
+        if (currentIndex >= mods.size()) {
+            log.info("All {} mod downloads completed", mods.size());
             return;
         }
 
-        int endIndex = Math.min(startIndex + batchSize, mods.size());
-        List<WorkshopMod> batch = mods.subList(startIndex, endIndex);
-        
-        log.info("Downloading batch {}/{}: {} mods (IDs: {})", 
-                (startIndex / batchSize) + 1, 
-                (mods.size() + batchSize - 1) / batchSize,
-                batch.size(),
-                batch.stream().map(WorkshopMod::getId).toList());
+        WorkshopMod mod = mods.get(currentIndex);
+        log.info("Downloading mod {}/{}: {} (ID: {})", 
+                currentIndex + 1, mods.size(), mod.getName(), mod.getId());
 
-        // Download all mods in this batch in a single SteamCMD session
-        steamCmdService.installOrUpdateWorkshopMods(batch)
-                .thenAcceptAsync(steamCmdJob -> {
-                    // Process each mod in the batch
-                    batch.forEach(mod -> handleInstallation(mod, steamCmdJob));
+        // Download single mod with retry logic (handled by SteamCmdExecutor)
+        steamCmdService.installOrUpdateWorkshopMod(mod)
+                .whenComplete((steamCmdJob, throwable) -> {
+                    if (throwable != null) {
+                        log.error("Unexpected error downloading mod {} (ID {})", mod.getName(), mod.getId(), throwable);
+                        // Create an error job manually
+                        handleInstallationError(mod, throwable);
+                    } else {
+                        // Handle normal installation
+                        handleInstallation(mod, steamCmdJob);
+                    }
                     
-                    // Add delay before processing next batch to avoid rate limiting
-                    if (endIndex < mods.size()) {
-                        int delaySeconds = 15; // 15 second delay between batches
-                        log.info("Waiting {} seconds before downloading next batch to avoid rate limiting", delaySeconds);
-                        CompletableFuture.delayedExecutor(delaySeconds, TimeUnit.SECONDS).execute(() -> {
-                            installModBatchesSequentially(mods, endIndex, batchSize);
-                        });
+                    // Continue with next mod after delay
+                    if (currentIndex + 1 < mods.size()) {
+                        int delaySeconds = 10; // Configurable delay to avoid rate limiting
+                        log.info("Waiting {} seconds before next download ({} remaining)", 
+                                delaySeconds, mods.size() - currentIndex - 1);
+                        CompletableFuture.delayedExecutor(delaySeconds, TimeUnit.SECONDS)
+                                .execute(() -> installModsSequentiallyWithDelay(mods, currentIndex + 1));
                     } else {
                         log.info("All mod downloads completed");
                     }
                 });
+    }
+
+    @Transactional
+    private void handleInstallationError(WorkshopMod mod, Throwable throwable) {
+        // Reload the mod entity from database to ensure it's attached to the current transaction
+        WorkshopMod managedMod = modsService.getMod(mod.getId())
+                .orElseThrow(() -> new IllegalStateException("Mod " + mod.getId() + " not found in database"));
+        
+        log.error("Download of mod '{}' (id {}) failed due to unexpected error",
+                managedMod.getName(), managedMod.getId(), throwable);
+        managedMod.setInstallationStatus(InstallationStatus.ERROR);
+        managedMod.setErrorStatus(ErrorStatus.GENERIC);
+        modsService.saveMod(managedMod);
     }
 
     public void uninstallMod(WorkshopMod mod) {
