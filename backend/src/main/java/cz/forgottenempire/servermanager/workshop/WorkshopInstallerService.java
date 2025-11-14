@@ -23,7 +23,10 @@ import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @Slf4j
@@ -48,17 +51,55 @@ class WorkshopInstallerService {
 
     /**
      * Initiates asynchronous installation or update of workshop mods.
-     * Mods are downloaded sequentially to avoid timeout issues with large batches.
+     * Mods are downloaded in batches to optimize Steam API usage and avoid rate limits.
+     * Each batch uses a single SteamCMD session (single login/logout) which is more efficient
+     * and less likely to hit rate limits compared to individual downloads.
+     * A delay is added between batches to prevent rate limiting.
      * Note: This method intentionally does not have @Transactional annotation.
      * The transaction boundary is in handleInstallation instead, which runs asynchronously
      * after SteamCmd completes. This ensures the database session is available when
      * saving mod installation status.
      */
     public void installOrUpdateMods(Collection<WorkshopMod> mods) {
-        mods.forEach(mod -> 
-            steamCmdService.installOrUpdateWorkshopMod(mod)
-                    .thenAcceptAsync(steamCmdJob -> handleInstallation(mod, steamCmdJob))
-        );
+        List<WorkshopMod> modList = List.copyOf(mods);
+        int batchSize = 5; // Download 5 mods per batch to balance efficiency and stability
+        
+        log.info("Starting download of {} mods in batches of {}", modList.size(), batchSize);
+        installModBatchesSequentially(modList, 0, batchSize);
+    }
+
+    private void installModBatchesSequentially(List<WorkshopMod> mods, int startIndex, int batchSize) {
+        if (startIndex >= mods.size()) {
+            log.info("All mod batches have been queued for download");
+            return;
+        }
+
+        int endIndex = Math.min(startIndex + batchSize, mods.size());
+        List<WorkshopMod> batch = mods.subList(startIndex, endIndex);
+        
+        log.info("Downloading batch {}/{}: {} mods (IDs: {})", 
+                (startIndex / batchSize) + 1, 
+                (mods.size() + batchSize - 1) / batchSize,
+                batch.size(),
+                batch.stream().map(WorkshopMod::getId).toList());
+
+        // Download all mods in this batch in a single SteamCMD session
+        steamCmdService.installOrUpdateWorkshopMods(batch)
+                .thenAcceptAsync(steamCmdJob -> {
+                    // Process each mod in the batch
+                    batch.forEach(mod -> handleInstallation(mod, steamCmdJob));
+                    
+                    // Add delay before processing next batch to avoid rate limiting
+                    if (endIndex < mods.size()) {
+                        int delaySeconds = 15; // 15 second delay between batches
+                        log.info("Waiting {} seconds before downloading next batch to avoid rate limiting", delaySeconds);
+                        CompletableFuture.delayedExecutor(delaySeconds, TimeUnit.SECONDS).execute(() -> {
+                            installModBatchesSequentially(mods, endIndex, batchSize);
+                        });
+                    } else {
+                        log.info("All mod downloads completed");
+                    }
+                });
     }
 
     public void uninstallMod(WorkshopMod mod) {
@@ -77,22 +118,26 @@ class WorkshopInstallerService {
 
     @Transactional
     private void handleInstallation(WorkshopMod mod, SteamCmdJob steamCmdJob) {
+        // Reload the mod entity from database to ensure it's attached to the current transaction
+        WorkshopMod managedMod = modsService.getMod(mod.getId())
+                .orElseThrow(() -> new IllegalStateException("Mod " + mod.getId() + " not found in database"));
+        
         if (steamCmdJob.getErrorStatus() != null) {
             log.error("Download of mod '{}' (id {}) failed, reason: {}",
-                    mod.getName(), mod.getId(), steamCmdJob.getErrorStatus());
-            mod.setInstallationStatus(InstallationStatus.ERROR);
-            mod.setErrorStatus(steamCmdJob.getErrorStatus());
-        } else if (!verifyModDirectoryExists(mod.getId(), mod.getServerType())) {
+                    managedMod.getName(), managedMod.getId(), steamCmdJob.getErrorStatus());
+            managedMod.setInstallationStatus(InstallationStatus.ERROR);
+            managedMod.setErrorStatus(steamCmdJob.getErrorStatus());
+        } else if (!verifyModDirectoryExists(managedMod.getId(), managedMod.getServerType())) {
             log.error("Could not find downloaded mod directory for mod '{}' (id {}) " +
-                    "even though download finished successfully", mod.getName(), mod.getId());
-            mod.setInstallationStatus(InstallationStatus.ERROR);
-            mod.setErrorStatus(ErrorStatus.GENERIC);
+                    "even though download finished successfully", managedMod.getName(), managedMod.getId());
+            managedMod.setInstallationStatus(InstallationStatus.ERROR);
+            managedMod.setErrorStatus(ErrorStatus.GENERIC);
         } else {
-            log.info("Mod '{}' (ID {}) successfully downloaded, now installing", mod.getName(), mod.getId());
-            installMod(mod);
+            log.info("Mod '{}' (ID {}) successfully downloaded, now installing", managedMod.getName(), managedMod.getId());
+            installMod(managedMod);
         }
 
-        modsService.saveMod(mod);
+        modsService.saveMod(managedMod);
     }
 
     private void installMod(WorkshopMod mod) {
