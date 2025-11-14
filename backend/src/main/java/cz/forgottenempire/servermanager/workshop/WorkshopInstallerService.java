@@ -77,22 +77,26 @@ class WorkshopInstallerService {
 
     @Transactional
     private void handleInstallation(WorkshopMod mod, SteamCmdJob steamCmdJob) {
+        // Reload the mod entity from database to ensure it's attached to the current transaction
+        WorkshopMod managedMod = modsService.getMod(mod.getId())
+                .orElseThrow(() -> new IllegalStateException("Mod " + mod.getId() + " not found in database"));
+        
         if (steamCmdJob.getErrorStatus() != null) {
             log.error("Download of mod '{}' (id {}) failed, reason: {}",
-                    mod.getName(), mod.getId(), steamCmdJob.getErrorStatus());
-            mod.setInstallationStatus(InstallationStatus.ERROR);
-            mod.setErrorStatus(steamCmdJob.getErrorStatus());
-        } else if (!verifyModDirectoryExists(mod.getId(), mod.getServerType())) {
+                    managedMod.getName(), managedMod.getId(), steamCmdJob.getErrorStatus());
+            managedMod.setInstallationStatus(InstallationStatus.ERROR);
+            managedMod.setErrorStatus(steamCmdJob.getErrorStatus());
+        } else if (!verifyModDirectoryExists(managedMod.getId(), managedMod.getServerType())) {
             log.error("Could not find downloaded mod directory for mod '{}' (id {}) " +
-                    "even though download finished successfully", mod.getName(), mod.getId());
-            mod.setInstallationStatus(InstallationStatus.ERROR);
-            mod.setErrorStatus(ErrorStatus.GENERIC);
+                    "even though download finished successfully", managedMod.getName(), managedMod.getId());
+            managedMod.setInstallationStatus(InstallationStatus.ERROR);
+            managedMod.setErrorStatus(ErrorStatus.GENERIC);
         } else {
-            log.info("Mod '{}' (ID {}) successfully downloaded, now installing", mod.getName(), mod.getId());
-            installMod(mod);
+            log.info("Mod '{}' (ID {}) successfully downloaded, now installing", managedMod.getName(), managedMod.getId());
+            installMod(managedMod);
         }
 
-        modsService.saveMod(mod);
+        modsService.saveMod(managedMod);
     }
 
     private void installMod(WorkshopMod mod) {
