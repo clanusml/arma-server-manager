@@ -50,6 +50,7 @@ RUN dpkg --add-architecture i386 \
           libcap2 \
           openjdk-17-jre \
           expect \
+          util-linux \
     && apt-get clean autoclean \
     && apt-get autoremove --yes \
     && rm -rf /var/lib/apt/lists/*
@@ -65,7 +66,9 @@ ENV LANG="en_US.UTF-8"
 ENV LANGUAGE="en_US.UTF-8"
 ENV LC_ALL="en_US.UTF-8"
 
-ENV STEAMCMD_PATH=/home/steam/steamcmd/steamcmd.sh
+COPY ./steamcmd-wrapper.sh /home/steam/steamcmd-wrapper.sh
+RUN chmod +x /home/steam/steamcmd-wrapper.sh
+ENV STEAMCMD_PATH=/home/steam/steamcmd-wrapper.sh
 ENV DIRECTORY_SERVERS=/home/steam/armaservermanager/servers
 ENV DIRECTORY_MODS=/home/steam/armaservermanager/mods
 ENV DIRECTORY_LOGS=/home/steam/armaservermanager/logs

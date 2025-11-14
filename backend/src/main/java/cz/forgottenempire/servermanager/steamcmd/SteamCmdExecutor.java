@@ -102,7 +102,7 @@ class SteamCmdExecutor {
                 exitCode = process.waitFor();
             } while (attempts < MAX_ATTEMPTS && exitedDueToTimeout(exitCode));
 
-            handleProcessResult(output, job);
+            handleProcessResult(exitCode, output, job);
         } catch (SteamAuthNotSetException e) {
             log.error("SteamAuth is not set up");
             job.setErrorStatus(ErrorStatus.WRONG_AUTH);
@@ -131,7 +131,12 @@ class SteamCmdExecutor {
         return commands;
     }
 
-    private void handleProcessResult(String result, SteamCmdJob job) {
+    private void handleProcessResult(int exitCode, String result, SteamCmdJob job) {
+        // Check exit code first - if it's 0, the command succeeded regardless of stderr output
+        if (exitCode == 0) {
+            return;
+        }
+
         // SteamCMD doesn't provide the user with any proper exit values or standard format for error messages.
         String errorLine = result.lines()
                 .map(String::toLowerCase)
