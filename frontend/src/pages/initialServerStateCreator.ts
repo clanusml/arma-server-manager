@@ -103,6 +103,13 @@ export function reforgerServerInitialState(): ReforgerServerDto {
         adminPassword: "",
         battlEye: true,
         thirdPersonViewEnabled: true,
+        crossPlatform: true,
+        fastValidation: true,
+        serverMaxViewDistance: 2500,
+        serverMinGrassDistance: 50,
+        networkViewDistance: 1500,
+        admins: [],
+        supportedPlatforms: ["PLATFORM_PC"],
         activeMods: [],
         customLaunchParameters: [],
         automaticRestart: {

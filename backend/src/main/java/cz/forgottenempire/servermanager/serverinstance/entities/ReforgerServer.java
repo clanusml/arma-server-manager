@@ -26,6 +26,18 @@ public class ReforgerServer extends Server {
 
     private boolean thirdPersonViewEnabled;
     private boolean battlEye;
+    private boolean crossPlatform;
+    private boolean fastValidation;
+    
+    private int serverMaxViewDistance;
+    private int serverMinGrassDistance;
+    private int networkViewDistance;
+    
+    @ElementCollection
+    private List<String> admins;
+    
+    @ElementCollection
+    private List<String> supportedPlatforms;
 
     @ElementCollection
     private List<ReforgerMod> activeMods;

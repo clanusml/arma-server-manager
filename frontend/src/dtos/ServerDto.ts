@@ -95,5 +95,12 @@ export interface ReforgerServerDto extends ServerDto {
     scenarioId: string,
     battlEye: boolean,
     thirdPersonViewEnabled: boolean,
+    crossPlatform: boolean,
+    fastValidation: boolean,
+    serverMaxViewDistance: number,
+    serverMinGrassDistance: number,
+    networkViewDistance: number,
+    admins: Array<string>,
+    supportedPlatforms: Array<string>,
     activeMods: Array<ReforgerModDto>
 }
