@@ -46,7 +46,6 @@ class WorkshopInstallerService {
         this.installationService = installationService;
     }
 
-    @Transactional
     public void installOrUpdateMods(Collection<WorkshopMod> mods) {
         steamCmdService.installOrUpdateWorkshopMods(mods)
                 .thenAcceptAsync(steamCmdJob -> steamCmdJob.getRelatedWorkshopMods().forEach(
@@ -68,6 +67,7 @@ class WorkshopInstallerService {
         log.info("Mod {} ({}) successfully deleted", mod.getName(), mod.getId());
     }
 
+    @Transactional
     private void handleInstallation(WorkshopMod mod, SteamCmdJob steamCmdJob) {
         if (steamCmdJob.getErrorStatus() != null) {
             log.error("Download of mod '{}' (id {}) failed, reason: {}",
