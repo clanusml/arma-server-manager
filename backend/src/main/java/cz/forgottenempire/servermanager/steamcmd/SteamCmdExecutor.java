@@ -36,7 +36,7 @@ class SteamCmdExecutor {
     private static final List<String> ERROR_KEYWORDS = Arrays.asList("error", "failure", "failed");
     private static final int EXIT_CODE_TIMEOUT_LINUX = 134;
     private static final int EXIT_CODE_TIMEOUT_WINDOWS = 10;
-    private static final int MAX_ATTEMPTS = 10;
+    private static final int MAX_ATTEMPTS = 5;
 
     private final File steamCmdFile;
     private final SteamAuthService steamAuthService;
