@@ -70,7 +70,7 @@ COPY ./steamcmd-wrapper.sh /home/steam/steamcmd-wrapper.sh
 RUN chmod +x /home/steam/steamcmd-wrapper.sh
 ENV STEAMCMD_PATH=/home/steam/steamcmd-wrapper.sh
 ENV DIRECTORY_SERVERS=/home/steam/armaservermanager/servers
-ENV DIRECTORY_MODS=/home/steam/armaservermanager
+ENV DIRECTORY_MODS=/home/steam/armaservermanager/mods
 ENV DIRECTORY_LOGS=/home/steam/armaservermanager/logs
 
 EXPOSE 8080/tcp
