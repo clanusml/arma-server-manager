@@ -2,6 +2,7 @@ package cz.forgottenempire.servermanager.workshop;
 
 import cz.forgottenempire.servermanager.common.Constants;
 import cz.forgottenempire.servermanager.common.InstallationStatus;
+import cz.forgottenempire.servermanager.common.PathsFactory;
 import cz.forgottenempire.servermanager.common.ServerType;
 import cz.forgottenempire.servermanager.common.exceptions.NotFoundException;
 import cz.forgottenempire.servermanager.common.exceptions.ServerNotInitializedException;
@@ -15,6 +16,7 @@ import javax.annotation.Nullable;
 import cz.forgottenempire.servermanager.workshop.metadata.ModMetadata;
 import cz.forgottenempire.servermanager.workshop.metadata.ModMetadataService;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.FileUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,17 +29,20 @@ public class WorkshopModsFacade {
     private final WorkshopInstallerService installerService;
     private final ModMetadataService fileDetailsService;
     private final ServerInstallationService serverInstallationService;
+    private final PathsFactory pathsFactory;
 
     @Autowired
     public WorkshopModsFacade(
             WorkshopModsService modsService,
             WorkshopInstallerService installerService,
             ModMetadataService fileDetailsService,
-            ServerInstallationService serverInstallationService) {
+            ServerInstallationService serverInstallationService,
+            PathsFactory pathsFactory) {
         this.modsService = modsService;
         this.installerService = installerService;
         this.fileDetailsService = fileDetailsService;
         this.serverInstallationService = serverInstallationService;
+        this.pathsFactory = pathsFactory;
     }
 
     public Optional<WorkshopMod> getMod(long id) {
@@ -45,7 +50,9 @@ public class WorkshopModsFacade {
     }
 
     public Collection<WorkshopMod> getAllMods() {
-        return modsService.getAllMods();
+        Collection<WorkshopMod> mods = modsService.getAllMods();
+        ensureFileSizesCalculated(mods);
+        return mods;
     }
 
     public Collection<WorkshopMod> getAllMods(@Nullable ServerType filter) {
@@ -55,7 +62,58 @@ public class WorkshopModsFacade {
         if (filter == ServerType.DAYZ_EXP) {
             filter = ServerType.DAYZ;
         }
-        return modsService.getAllMods(filter);
+        Collection<WorkshopMod> mods = modsService.getAllMods(filter);
+        ensureFileSizesCalculated(mods);
+        return mods;
+    }
+
+    /**
+     * Ensures that installed mods have their file sizes calculated.
+     * This is needed for mods that were installed before file size tracking was added.
+     */
+    @Transactional
+    private void ensureFileSizesCalculated(Collection<WorkshopMod> mods) {
+        boolean anyModUpdated = false;
+        for (WorkshopMod mod : mods) {
+            if (shouldRecalculateFileSize(mod)) {
+                Long calculatedSize = calculateModFileSize(mod.getId(), mod.getServerType());
+                if (calculatedSize != null && calculatedSize > 0) {
+                    mod.setFileSize(calculatedSize);
+                    anyModUpdated = true;
+                    log.debug("Updated file size for mod {} (ID {}): {} bytes", 
+                            mod.getName(), mod.getId(), calculatedSize);
+                }
+            }
+        }
+        if (anyModUpdated) {
+            modsService.saveAllMods(mods.stream().toList());
+        }
+    }
+
+    /**
+     * Determines if a mod's file size should be recalculated.
+     */
+    private boolean shouldRecalculateFileSize(WorkshopMod mod) {
+        // Only recalculate for finished installations with missing or zero file size
+        if (mod.getInstallationStatus() != InstallationStatus.FINISHED) {
+            return false;
+        }
+        Long fileSize = mod.getFileSize();
+        return fileSize == null || fileSize == 0L;
+    }
+
+    /**
+     * Calculates the actual file size of a mod on disk.
+     */
+    private Long calculateModFileSize(Long modId, ServerType type) {
+        try {
+            return FileUtils.sizeOfDirectory(
+                    pathsFactory.getModInstallationPath(modId, type).toFile()
+            );
+        } catch (Exception e) {
+            log.warn("Failed to calculate file size for mod {} ({}): {}", modId, type, e.getMessage());
+            return null;
+        }
     }
 
     @Transactional
