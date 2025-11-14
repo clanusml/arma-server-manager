@@ -32,6 +32,15 @@ public class ReforgerServerDto implements ServerDto {
 
     private boolean battlEye;
     private boolean thirdPersonViewEnabled;
+    private boolean crossPlatform;
+    private boolean fastValidation;
+    
+    private int serverMaxViewDistance;
+    private int serverMinGrassDistance;
+    private int networkViewDistance;
+    
+    private List<String> admins;
+    private List<String> supportedPlatforms;
 
     private List<ReforgerModDto> activeMods;
 
