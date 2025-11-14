@@ -1,5 +1,6 @@
 package cz.forgottenempire.servermanager.workshop;
 
+import cz.forgottenempire.servermanager.common.Constants;
 import cz.forgottenempire.servermanager.common.InstallationStatus;
 import cz.forgottenempire.servermanager.common.PathsFactory;
 import cz.forgottenempire.servermanager.common.ServerType;
@@ -177,14 +178,28 @@ class WorkshopInstallerService {
                     managedMod.getName(), managedMod.getId(), steamCmdJob.getErrorStatus());
             managedMod.setInstallationStatus(InstallationStatus.ERROR);
             managedMod.setErrorStatus(steamCmdJob.getErrorStatus());
-        } else if (!verifyModDirectoryExists(managedMod.getId(), managedMod.getServerType())) {
-            log.error("Could not find downloaded mod directory for mod '{}' (id {}) " +
-                    "even though download finished successfully", managedMod.getName(), managedMod.getId());
-            managedMod.setInstallationStatus(InstallationStatus.ERROR);
-            managedMod.setErrorStatus(ErrorStatus.GENERIC);
         } else {
-            log.info("Mod '{}' (ID {}) successfully downloaded, now installing", managedMod.getName(), managedMod.getId());
-            installMod(managedMod);
+            // Check if mod is in downloads folder and move to content folder
+            try {
+                moveModFromDownloadsToContent(managedMod.getId(), managedMod.getServerType());
+            } catch (IOException e) {
+                log.error("Failed to move mod '{}' (ID {}) from downloads to content folder", 
+                        managedMod.getName(), managedMod.getId(), e);
+                managedMod.setInstallationStatus(InstallationStatus.ERROR);
+                managedMod.setErrorStatus(ErrorStatus.IO);
+                modsService.saveMod(managedMod);
+                return;
+            }
+            
+            if (!verifyModDirectoryExists(managedMod.getId(), managedMod.getServerType())) {
+                log.error("Could not find downloaded mod directory for mod '{}' (id {}) " +
+                        "even though download finished successfully", managedMod.getName(), managedMod.getId());
+                managedMod.setInstallationStatus(InstallationStatus.ERROR);
+                managedMod.setErrorStatus(ErrorStatus.GENERIC);
+            } else {
+                log.info("Mod '{}' (ID {}) successfully downloaded, now installing", managedMod.getName(), managedMod.getId());
+                installMod(managedMod);
+            }
         }
 
         modsService.saveMod(managedMod);
@@ -272,6 +287,43 @@ class WorkshopInstallerService {
         log.debug("Deleting symlink {}", linkPath);
         if (Files.isSymbolicLink(linkPath)) {
             Files.delete(linkPath);
+        }
+    }
+
+    /**
+     * Moves a mod from the downloads folder to the content folder.
+     * SteamCmd's workshop_download_item command downloads mods to steamapps/workshop/downloads,
+     * but the application expects them in steamapps/workshop/content.
+     */
+    private void moveModFromDownloadsToContent(Long modId, ServerType type) throws IOException {
+        Path contentPath = pathsFactory.getModInstallationPath(modId, type);
+        Path downloadsPath = Path.of(pathsFactory.getModsBasePath().toString(), "steamapps", "workshop", 
+                "downloads", String.valueOf(Constants.GAME_IDS.get(type)), String.valueOf(modId));
+        
+        // If already in content folder, nothing to do
+        if (Files.isDirectory(contentPath)) {
+            log.debug("Mod {} already exists in content folder", modId);
+            return;
+        }
+        
+        // Check if mod is in downloads folder
+        if (!Files.isDirectory(downloadsPath)) {
+            log.debug("Mod {} not found in downloads folder either", modId);
+            return;
+        }
+        
+        log.info("Moving mod {} from downloads to content folder", modId);
+        
+        // Create parent directories for content path if they don't exist
+        Files.createDirectories(contentPath.getParent());
+        
+        // Move the directory from downloads to content
+        try {
+            FileUtils.moveDirectory(downloadsPath.toFile(), contentPath.toFile());
+            log.info("Successfully moved mod {} to content folder", modId);
+        } catch (IOException e) {
+            log.error("Failed to move mod {} from downloads to content", modId, e);
+            throw e;
         }
     }
 
