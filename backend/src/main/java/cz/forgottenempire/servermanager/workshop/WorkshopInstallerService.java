@@ -88,7 +88,7 @@ class WorkshopInstallerService {
                     
                     // Continue with next mod after delay
                     if (currentIndex + 1 < mods.size()) {
-                        int delaySeconds = 10; // Configurable delay to avoid rate limiting
+                        int delaySeconds = 3; // Configurable delay to avoid rate limiting
                         log.info("Waiting {} seconds before next download ({} remaining)", 
                                 delaySeconds, mods.size() - currentIndex - 1);
                         CompletableFuture.delayedExecutor(delaySeconds, TimeUnit.SECONDS)
