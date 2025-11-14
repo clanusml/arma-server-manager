@@ -48,16 +48,17 @@ class WorkshopInstallerService {
 
     /**
      * Initiates asynchronous installation or update of workshop mods.
+     * Mods are downloaded sequentially to avoid timeout issues with large batches.
      * Note: This method intentionally does not have @Transactional annotation.
      * The transaction boundary is in handleInstallation instead, which runs asynchronously
      * after SteamCmd completes. This ensures the database session is available when
      * saving mod installation status.
      */
     public void installOrUpdateMods(Collection<WorkshopMod> mods) {
-        steamCmdService.installOrUpdateWorkshopMods(mods)
-                .thenAcceptAsync(steamCmdJob -> steamCmdJob.getRelatedWorkshopMods().forEach(
-                        mod -> handleInstallation(mod, steamCmdJob)
-                ));
+        mods.forEach(mod -> 
+            steamCmdService.installOrUpdateWorkshopMod(mod)
+                    .thenAcceptAsync(steamCmdJob -> handleInstallation(mod, steamCmdJob))
+        );
     }
 
     public void uninstallMod(WorkshopMod mod) {
