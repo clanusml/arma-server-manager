@@ -23,7 +23,8 @@ database.encryption.secret=<AES-256 key>
 steamcmd.path=/usr/games/steamcmd
 
 # Absolute path to a directory where the mods (and temporary server files) are installed.
-directory.mods=/home/armaservermanager/mods
+# SteamCmd will create steamapps/workshop/content subdirectories under this path.
+directory.mods=/home/armaservermanager
 
 # Absolute path to servers base folder.
 directory.servers=/home/armaservermanager/servers/
