@@ -53,6 +53,7 @@ class WorkshopInstallerService {
      * Initiates asynchronous installation or update of workshop mods.
      * Mods are downloaded sequentially one at a time with delays between downloads
      * to avoid rate limiting and ensure each mod is processed independently.
+     * If a rate limit error is detected, all remaining downloads are cancelled.
      * Note: This method intentionally does not have @Transactional annotation.
      * The transaction boundary is in handleInstallation instead, which runs asynchronously
      * after SteamCmd completes. This ensures the database session is available when
@@ -61,12 +62,19 @@ class WorkshopInstallerService {
     public void installOrUpdateMods(Collection<WorkshopMod> mods) {
         List<WorkshopMod> modList = List.copyOf(mods);
         log.info("Starting sequential download of {} mods", modList.size());
-        installModsSequentiallyWithDelay(modList, 0);
+        installModsSequentiallyWithDelay(modList, 0, false);
     }
 
-    private void installModsSequentiallyWithDelay(List<WorkshopMod> mods, int currentIndex) {
+    private void installModsSequentiallyWithDelay(List<WorkshopMod> mods, int currentIndex, boolean rateLimitEncountered) {
         if (currentIndex >= mods.size()) {
             log.info("All {} mod downloads completed", mods.size());
+            return;
+        }
+
+        // If rate limit was encountered in a previous download, cancel all remaining mods
+        if (rateLimitEncountered) {
+            log.warn("Rate limit encountered - cancelling {} remaining mod downloads", mods.size() - currentIndex);
+            cancelRemainingMods(mods, currentIndex);
             return;
         }
 
@@ -77,6 +85,8 @@ class WorkshopInstallerService {
         // Download single mod with retry logic (handled by SteamCmdExecutor)
         steamCmdService.installOrUpdateWorkshopMod(mod)
                 .whenComplete((steamCmdJob, throwable) -> {
+                    boolean shouldCancelRemaining = false;
+                    
                     if (throwable != null) {
                         log.error("Unexpected error downloading mod {} (ID {})", mod.getName(), mod.getId(), throwable);
                         // Create an error job manually
@@ -84,19 +94,49 @@ class WorkshopInstallerService {
                     } else {
                         // Handle normal installation
                         handleInstallation(mod, steamCmdJob);
+                        
+                        // Check if rate limit error was encountered
+                        if (steamCmdJob.getErrorStatus() == ErrorStatus.RATE_LIMIT) {
+                            log.error("Rate limit exceeded for mod '{}' (ID {}). Cancelling all remaining downloads.", 
+                                    mod.getName(), mod.getId());
+                            shouldCancelRemaining = true;
+                        }
                     }
                     
-                    // Continue with next mod after delay
+                    // Continue with next mod after delay, or cancel if rate limited
                     if (currentIndex + 1 < mods.size()) {
-                        int delaySeconds = 3; // Configurable delay to avoid rate limiting
-                        log.info("Waiting {} seconds before next download ({} remaining)", 
-                                delaySeconds, mods.size() - currentIndex - 1);
-                        CompletableFuture.delayedExecutor(delaySeconds, TimeUnit.SECONDS)
-                                .execute(() -> installModsSequentiallyWithDelay(mods, currentIndex + 1));
+                        if (shouldCancelRemaining) {
+                            // Cancel immediately without delay
+                            installModsSequentiallyWithDelay(mods, currentIndex + 1, true);
+                        } else {
+                            int delaySeconds = 3; // Configurable delay to avoid rate limiting
+                            log.info("Waiting {} seconds before next download ({} remaining)", 
+                                    delaySeconds, mods.size() - currentIndex - 1);
+                            CompletableFuture.delayedExecutor(delaySeconds, TimeUnit.SECONDS)
+                                    .execute(() -> installModsSequentiallyWithDelay(mods, currentIndex + 1, false));
+                        }
                     } else {
                         log.info("All mod downloads completed");
                     }
                 });
+    }
+
+    /**
+     * Cancels all remaining mods in the download queue by marking them with RATE_LIMIT error.
+     * This is called when a rate limit error is detected during batch downloads.
+     */
+    @Transactional
+    private void cancelRemainingMods(List<WorkshopMod> mods, int startIndex) {
+        for (int i = startIndex; i < mods.size(); i++) {
+            WorkshopMod mod = mods.get(i);
+            WorkshopMod managedMod = modsService.getMod(mod.getId())
+                    .orElseThrow(() -> new IllegalStateException("Mod " + mod.getId() + " not found in database"));
+            
+            log.info("Cancelling mod '{}' (ID {}) due to rate limit", managedMod.getName(), managedMod.getId());
+            managedMod.setInstallationStatus(InstallationStatus.ERROR);
+            managedMod.setErrorStatus(ErrorStatus.RATE_LIMIT);
+            modsService.saveMod(managedMod);
+        }
     }
 
     @Transactional
