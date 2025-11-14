@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 @Service
@@ -48,6 +49,19 @@ public class SteamCmdService {
         );
 
         return enqueueJob(new SteamCmdJob(workshopMods, parameters.build()));
+    }
+
+    public CompletableFuture<SteamCmdJob> installOrUpdateWorkshopMod(WorkshopMod workshopMod) {
+        SteamCmdParameters parameters = new SteamCmdParameters.Builder()
+                .withInstallDir(pathsFactory.getModsBasePath().toAbsolutePath().toString())
+                .withLogin()
+                .withWorkshopItemInstall(
+                        Constants.GAME_IDS.get(workshopMod.getServerType()),
+                        workshopMod.getId(), true
+                )
+                .build();
+
+        return enqueueJob(new SteamCmdJob(List.of(workshopMod), parameters));
     }
 
     private CompletableFuture<SteamCmdJob> enqueueJob(SteamCmdJob job) {
