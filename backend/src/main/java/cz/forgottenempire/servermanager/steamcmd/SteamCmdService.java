@@ -8,7 +8,11 @@ import cz.forgottenempire.servermanager.workshop.WorkshopMod;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
@@ -62,6 +66,21 @@ public class SteamCmdService {
                 .build();
 
         return enqueueJob(new SteamCmdJob(List.of(workshopMod), parameters));
+    }
+
+    public void clearCache() throws IOException {
+        Path appcachePath = Path.of(pathsFactory.getModsBasePath().toString(), "steamapps", "appcache");
+        if (Files.exists(appcachePath)) {
+            Files.walk(appcachePath)
+                    .sorted(Comparator.reverseOrder())
+                    .forEach(path -> {
+                        try {
+                            Files.delete(path);
+                        } catch (IOException e) {
+                            throw new RuntimeException("Failed to delete cache file: " + path, e);
+                        }
+                    });
+        }
     }
 
     private CompletableFuture<SteamCmdJob> enqueueJob(SteamCmdJob job) {

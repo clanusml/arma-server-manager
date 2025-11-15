@@ -31,3 +31,7 @@ export function downloadLogFile() {
             document.body.removeChild(link);
         })
 }
+
+export function clearCache() {
+    return http.delete(apiEndpoint + "/cache");
+}
