@@ -29,12 +29,14 @@ class SteamCmdControllerTest {
     private SteamCmdLogsService logsService;
     @Mock(stubOnly = true)
     private SteamCmdItemInfoRepository itemInfoRepository;
+    @Mock
+    private SteamCmdService steamCmdService;
 
     private SteamCmdController steamCmdController;
 
     @BeforeEach
     void setUp() {
-        steamCmdController = new SteamCmdController(itemInfoRepository, logsService);
+        steamCmdController = new SteamCmdController(itemInfoRepository, logsService, steamCmdService);
     }
 
     @Test
@@ -95,5 +97,13 @@ class SteamCmdControllerTest {
         ResponseEntity<String> response = steamCmdController.getLastLinesFromLog(3);
 
         assertThat(response).isEqualTo(ResponseEntity.ok(expectedLogLines));
+    }
+
+    @Test
+    void clearCache() throws IOException {
+        ResponseEntity<Void> response = steamCmdController.clearCache();
+
+        verify(steamCmdService).clearCache();
+        assertThat(response.getStatusCode().value()).isEqualTo(204);
     }
 }

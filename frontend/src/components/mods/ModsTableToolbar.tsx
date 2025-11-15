@@ -4,6 +4,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import {Box, Tab, Tabs} from "@mui/material";
 import UpdateIcon from '@mui/icons-material/Update';
 import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd';
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 
 type ModsTableToolbarProps = {
     selectedModsCount: number,
@@ -14,6 +15,7 @@ type ModsTableToolbarProps = {
     onUpdateClicked: () => void,
     onCreatePresetClicked: () => void,
     onUninstallClicked: () => void,
+    onClearCacheClicked: () => void,
     onFilterChange: (_: any, newValue: string) => void,
 }
 
@@ -27,6 +29,7 @@ function ModsTableToolbar(
         dayZModsCount,
         onCreatePresetClicked,
         onUninstallClicked,
+        onClearCacheClicked,
         mixedModsSelected
     }: ModsTableToolbarProps)
 {
@@ -59,6 +62,13 @@ function ModsTableToolbar(
                         <span>
                             <IconButton disabled={selectedModsCount === 0} onClick={onUninstallClicked}>
                                 <DeleteIcon/>
+                            </IconButton>
+                        </span>
+            </Tooltip>
+            <Tooltip title="Clear Steam cache and partial downloads (fixes broken mods, keeps working mods safe)">
+                        <span>
+                            <IconButton onClick={onClearCacheClicked}>
+                                <DeleteSweepIcon/>
                             </IconButton>
                         </span>
             </Tooltip>

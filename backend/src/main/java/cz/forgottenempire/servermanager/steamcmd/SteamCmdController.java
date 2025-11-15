@@ -21,11 +21,13 @@ class SteamCmdController {
     private static final String DEFAULT_LOG_LINES_COUNT = "100";
     private final SteamCmdItemInfoRepository itemInfoRepository;
     private final SteamCmdLogsService logsService;
+    private final SteamCmdService steamCmdService;
 
     @Autowired
-    public SteamCmdController(SteamCmdItemInfoRepository itemInfoRepository, SteamCmdLogsService logsService) {
+    public SteamCmdController(SteamCmdItemInfoRepository itemInfoRepository, SteamCmdLogsService logsService, SteamCmdService steamCmdService) {
         this.itemInfoRepository = itemInfoRepository;
         this.logsService = logsService;
+        this.steamCmdService = steamCmdService;
     }
 
     @GetMapping
@@ -52,5 +54,11 @@ class SteamCmdController {
         LogFile logFile = logsService.getLogFile();
         String logLines = logFile.getLastLines(count);
         return ResponseEntity.ok(logLines);
+    }
+
+    @DeleteMapping("/cache")
+    public ResponseEntity<Void> clearCache() throws IOException {
+        steamCmdService.clearCache();
+        return ResponseEntity.noContent().build();
     }
 }

@@ -8,7 +8,7 @@ import {toast} from "material-react-toastify";
 import {createModPreset} from "../../services/modPresetsService";
 import {ModDto} from "../../dtos/ModDto.ts";
 import {SteamCmdItemInfoDto} from "../../dtos/SteamCmdItemInfoDto.ts";
-import {getItemInfo} from "../../services/steamCmdService.ts";
+import {getItemInfo, clearCache} from "../../services/steamCmdService.ts";
 
 type WorkshopItemInfoResponse = {
     [id: number]: SteamCmdItemInfoDto
@@ -174,6 +174,15 @@ export default function ModsManagement() {
         await setModServerOnly(modId, isServerOnly);
     };
 
+    const handleClearCache = async () => {
+        try {
+            await clearCache();
+            toast.success("Steam cache and partial downloads cleared. Working mods are safe. Broken mods can now be re-downloaded fresh.");
+        } catch (error) {
+            toast.error("Failed to clear Steam cache and downloads");
+        }
+    };
+
     const errorOccured = mods.some(mod => mod.installationStatus === "ERROR");
     const filteredMods = filterMods();
     const arma3ModsCount = mods.filter(mod => mod.serverType === "ARMA3").length;
@@ -192,6 +201,7 @@ export default function ModsManagement() {
                    onModUninstallClicked={handleUninstall} onModInstallClicked={handleInstall}
                    onFilterChange={handleFilterChange} onCreatePresetClicked={handlePresedDialogOpen}
                    onServerOnlyChanged={handleServerOnlyChanged}
+                   onClearCacheClicked={handleClearCache}
         />
         <CreatePresetDialog open={newPresetDialogOpen} onClose={handlePresedDialogClose}
                             onConfirmClicked={handleCreateNewPreset}

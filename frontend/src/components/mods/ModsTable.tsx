@@ -65,6 +65,7 @@ type ModsTableProps = {
     onModUpdateClicked: () => void,
     onCreatePresetClicked: () => void,
     onModUninstallClicked: () => void,
+    onClearCacheClicked: () => void,
     onFilterChange: (_: any, newValue: string) => void,
     onRowClick: (rowId: number | string) => void,
     onSelectAllRowsClick: (event: ChangeEvent<HTMLInputElement>) => void,
@@ -170,6 +171,7 @@ const ModsTable = (props: ModsTableProps) => {
                                    onUpdateClicked={props.onModUpdateClicked}
                                    onCreatePresetClicked={props.onCreatePresetClicked}
                                    onUninstallClicked={props.onModUninstallClicked}
+                                   onClearCacheClicked={props.onClearCacheClicked}
                                    onFilterChange={props.onFilterChange}
                                />}
 
