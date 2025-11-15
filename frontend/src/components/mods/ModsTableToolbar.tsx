@@ -65,7 +65,7 @@ function ModsTableToolbar(
                             </IconButton>
                         </span>
             </Tooltip>
-            <Tooltip title="Clear Steam cache">
+            <Tooltip title="Clear Steam cache and partial downloads (fixes broken mods, keeps working mods safe)">
                         <span>
                             <IconButton onClick={onClearCacheClicked}>
                                 <DeleteSweepIcon/>

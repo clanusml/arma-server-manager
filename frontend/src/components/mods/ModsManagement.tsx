@@ -177,9 +177,9 @@ export default function ModsManagement() {
     const handleClearCache = async () => {
         try {
             await clearCache();
-            toast.success("Steam cache cleared successfully");
+            toast.success("Steam cache and partial downloads cleared. Working mods are safe. Broken mods can now be re-downloaded fresh.");
         } catch (error) {
-            toast.error("Failed to clear Steam cache");
+            toast.error("Failed to clear Steam cache and downloads");
         }
     };
 

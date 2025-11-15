@@ -69,7 +69,11 @@ public class SteamCmdService {
     }
 
     public void clearCache() throws IOException {
-        Path appcachePath = Path.of(pathsFactory.getModsBasePath().toString(), "steamapps", "appcache");
+        Path steamappsPath = Path.of(pathsFactory.getModsBasePath().toString(), "steamapps");
+        
+        // Clear appcache directory (Steam metadata cache only)
+        // This does NOT delete installed mods in workshop/content
+        Path appcachePath = Path.of(steamappsPath.toString(), "appcache");
         if (Files.exists(appcachePath)) {
             Files.walk(appcachePath)
                     .sorted(Comparator.reverseOrder())
@@ -78,6 +82,21 @@ public class SteamCmdService {
                             Files.delete(path);
                         } catch (IOException e) {
                             throw new RuntimeException("Failed to delete cache file: " + path, e);
+                        }
+                    });
+        }
+        
+        // Clear downloads directory to remove broken/partial downloads only
+        // This does NOT delete installed mods in workshop/content
+        Path downloadsPath = Path.of(steamappsPath.toString(), "workshop", "downloads");
+        if (Files.exists(downloadsPath)) {
+            Files.walk(downloadsPath)
+                    .sorted(Comparator.reverseOrder())
+                    .forEach(path -> {
+                        try {
+                            Files.delete(path);
+                        } catch (IOException e) {
+                            throw new RuntimeException("Failed to delete download file: " + path, e);
                         }
                     });
         }
